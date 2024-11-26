@@ -1,0 +1,6 @@
+
+Software setup:
+
+1.JDK 17
+2.Intellij Idea community Edition
+3.Docker Desktop
