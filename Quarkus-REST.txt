@@ -1,0 +1,348 @@
+				Microservice Implementation
+.....................................................................................
+Microservices just archtecture, we can implement any language,any framework.
+
+Java implementation:
+1.Spring cloud
+2.Quarkus
+3.Vertx
+etc....
+.....................................................................................
+			Quarkus as Microservice implmentation
+.....................................................................................
+Quarkus is framework which implements the most of the microservice design patterns
+via Ecplise Microprofile specification.
+
+Micro Profile specification is  extension of "Microservice" design patterns.
+
+
+Domain Modeling
+................
+ProductCatelog Management
+Inventory Management
+OrderManagement
+DeliveryManagement
+
+Application Architecture
+
+ProductCataglog
+  ->Service
+
+What is service?
+
+  Service is mini application.
+  Service is sub domain in application 
+  For eg in Ecommerce domain "ProductCatglog" ,"Cusotmer Management","Order Management"
+
+How to implement service?
+
+  Service can be implemented as a java maven project...
+  Service has apis
+
+API: Application programming interface..
+ Which exposes biz logic 
+ Returns data , recevies data
+
+Service API Design:
+
+1.local api
+  apis are exposed within objects, called by other objects
+2.remote api
+  apis are exposed within objects, called by other objects/programs via networks
+
+Remote apis: (RPI)
+
+1.webservices
+   soap api /rest api/graphql api
+2.RPC
+   TCP api
+   Grpc apis
+3.MOM -Event Driven Microservices
+  Using kafka,Rabbitmq.
+..................................................................................
+						RestFull WebService Implementation
+..................................................................................
+         	  Microservice-HTTP Based Microservice
+  	  RESTFull Web Service using JAX-RS  Spec (Jakarta RESTful Web Services)
+		      using RESTEasy Framework
+.....................................................................................
+
+Jakarta RESTful Web Services is spec of JEE , implementation is RestEasy Framework..
+
+In Quarkus RestEasy has been modified for building non blocking apps
+
+
+ 			  QuarkusApp
+			      |
+	             Quarkus RestEasy Module
+			      |
+		         RestEasy Framwork
+			     |
+		   Jarkarta RestFull WebService
+
+RESTEasy:
+
+  RESTEasy is a JBoss / Red Hat project that provides various frameworks to help you build RESTful Web Services and RESTful Java applications. It is an implementation of the Jakarta RESTful Web Services, an Eclipse Foundation specification that provides a Java API for RESTful Web Services over the HTTP protocol.
+
+Moreover, RESTEasy also implements the MicroProfile REST Client specification API
+
+Quarkus team uses RESTEasy framework for building MicroService's REST API Design.
+
+Traditional RESTEasy apps are deployed on "Jboss,Apach Tomcat" like web containers.
+.....................................................................................
+			  Types of RESTFull Web services 
+
+1.Reactive web service - Highly Recommended
+2.Non Reactive web service - Not recommended
+
+
+By default,Rest apis are blocking, meaning that which is not handled by event loop thread.
+
+How to create rest api?
+
+Note:
+ Rest api we write based ON " jakarta RestFull WebServices" specification,Using Rest Easy Framwork.
+https://jakarta.ee/specifications/restful-ws/
+
+Step 1:
+create quarkus app rest-app
+
+Project Dependency:
+   <dependency>
+           <groupId>io.quarkus</groupId>
+           <artifactId>quarkus-rest</artifactId>
+   </dependency>
+
+Step 2:
+ Run quarkus app
+ >quarkus dev
+.....................................................................................
+			  REST API Core concepts
+.....................................................................................
+
+Resources:
+   Domain Model which expose api which are accessed by clients using urls 
+
+CustomerResource,ProductResource,PaymentResource etc....
+
+In Spring we call controller, in Quarkus we call "Resource"
+
+RESTEasy is annotation driven based on jakarta spec.
+
+package org.acme;
+
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.MediaType;
+
+@Path("/hello")
+public class GreetingResource {
+
+    @GET
+    @Produces(MediaType.TEXT_PLAIN)
+    public String hello() {
+        return "Hello from Quarkus REST";
+    }
+}
+Common Annoations
+ Core Package
+jakarata.ws.rs
+
+
+@Path - to map url
+@GET -  http get
+@POST - http post
+@PUT -  http put
+@DELETE - http delete.
+.....................................................................................
+			  CURD operation
+...................................................................................
+
+
+package com.ibm.rest.api;
+
+import jakarta.ws.rs.*;
+
+@Path("customers")
+public class CustomerResource {
+    //api
+    @GET
+    public String findAll() {
+        return "Find all";
+    }
+    @POST
+    public String save(){
+        return  "Save";
+    }
+    @PUT
+    public String update(){
+        return  "update";
+    }
+    @DELETE
+    public String remove(){
+        return  "Remove";
+    }
+}
+.....................................................................................				 Nested URL
+
+Eg
+
+GET /products/reviews
+GET /customers/comments
+
+package com.ibm.rest.api;
+
+import jakarta.ws.rs.*;
+
+@Path("customers")
+public class CustomerResource {
+    //api
+    @GET
+    public String findAll() {
+        return "Find all";
+    }
+    @GET
+    @Path("comments")
+    public String getComments(){
+        return  "Comments";
+    }
+    @POST
+    public String save(){
+        return  "Save";
+    }
+    @PUT
+    public String update(){
+        return  "update";
+    }
+    @DELETE
+    public String remove(){
+        return  "Remove";
+    }
+}
+....................................................................................
+				 How to Pass data to REST API - Input Parameter
+....................................................................................
+Data can be passed to the End Point.
+
+1.Through url - path parameter,query parameter,matrix parameter
+                Matrix parameters are similar to query param, passing more than one 		parameter
+
+2.Through payload
+    Sending data part of the http body..
+
+
+Path Parameter:
+...............
+
+GET /customers/1
+GET /customers/2
+GET /customers/3
+
+package com.ibm.rest.api.parameters.path;
+
+import jakarta.ws.rs.*;
+
+@Path("books")
+public class BooksResource {
+
+    @GET
+    public String findAll() {
+        return "Books";
+    }
+
+    //dynamic parameter
+    // /books/1
+    @GET
+    @Path("{Id}")
+    public String findById(@PathParam("Id") Integer id) {
+        return "Books By Id " + id;
+    }
+
+    //delete by id
+    @DELETE
+    @Path("{Id}")
+    public String delete(@PathParam("Id") Integer id) {
+        return "Books Delete By Id " + id;
+    }
+    @PUT
+    @Path("{Id}")
+    public String update(@PathParam("Id") Integer id) {
+        return "Books Update By Id " + id;
+    }
+
+}
+
+
+Testing:
+ GET localhost:8080/books/1
+
+.....................................................................................
+			Default Value for query parameter
+.....................................................................................
+package com.ibm.rest.api.parameters.query;
+
+
+import jakarta.ws.rs.DefaultValue;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.QueryParam;
+
+@Path("countries")
+public class Country {
+
+    @GET
+    public String getCountryByState(@QueryParam("state") @DefaultValue("TN") String state){
+        return  "State " + state;
+    }
+}
+
+Testing:
+localhost:8080/countries?state=KA
+.................................................................................................
+				....................................................................................
+						Matrix Parameter
+....................................................................................
+
+Matrix parameters and query parameters are similar, but they are different from delimters.
+
+package com.ibm.rest.api.parameters.matrix;
+
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.MatrixParam;
+import jakarta.ws.rs.Path;
+
+@Path("hotel")
+public class Hotel {
+
+    @GET
+    public String getHotelInfo(@MatrixParam("rating") String rating, @MatrixParam("location") String location, @MatrixParam("price") double price) {
+        return "Rating="+ rating + " Location=" + location + " Price=" + price;
+    }
+}
+
+Testing:
+localhost:8080/hotel;rating=8;location=Near By City Center;price=2000
+
+....................................................................................
+			 Default Value and Matrix Parameters
+...................................................................................
+package com.ibm.rest.api.parameters.matrix;
+
+import jakarta.ws.rs.DefaultValue;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.MatrixParam;
+import jakarta.ws.rs.Path;
+
+@Path("hotel")
+public class Hotel {
+
+    @GET
+    public String getHotelInfo(@MatrixParam("rating") @DefaultValue("0") String rating, @MatrixParam("location") @DefaultValue("Airport Near") String location, @MatrixParam("price") @DefaultValue("0.0") double price) {
+        return "Rating=" + rating + " Location=" + location + " Price=" + price;
+    }
+}
+
+Testing
+localhost:8080/hotel
+................................................................................................
