@@ -346,3 +346,169 @@ public class Hotel {
 Testing
 localhost:8080/hotel
 ................................................................................................
+
+....................................................................................
+			How to pass payload (data) to REST API
+...................................................................................
+
+Generally data is submitted from client to rest api as "JSON,XML"
+
+
+package com.ibm.rest.api.payload.entity;
+
+public class Teacher {
+    private Long id;
+    private String name;
+    private String subject;
+
+    @Override
+    public String toString() {
+        return "Teacher{" +
+                "id=" + id +
+                ", name='" + name + '\'' +
+                ", subject='" + subject + '\'' +
+                '}';
+    }
+
+    public Teacher() {
+    }
+
+    public Teacher(Long id, String name, String subject) {
+        this.id = id;
+        this.name = name;
+        this.subject = subject;
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getSubject() {
+        return subject;
+    }
+
+    public void setSubject(String subject) {
+        this.subject = subject;
+    }
+}
+
+
+package com.ibm.rest.api.payload;
+
+import com.ibm.rest.api.payload.entity.Teacher;
+import jakarta.ws.rs.POST;
+import jakarta.ws.rs.Path;
+
+@Path("teacher")
+public class TeacherResource {
+
+    @POST
+    public String save(Teacher teacher){
+        System.out.println(teacher);
+        return "saved";
+    }
+}
+
+Testing 
+POST /teacher
+{
+    "id": 1,
+    "name": "Subramanian",
+    "subject": "Quarkus"
+}
+
+The response would be
+
+415 Unsupported Media Type
+
+By default Quarkus does not know how to convert JSON into java object..That means no json Parser
+
+Solution:
+ We need to install/add json parser dependency - Jakson Parser.
+
+Before adding json paraser dependency, we need to disuccess one more concept
+
+.....................................................................................
+			                            Extension
+.....................................................................................
+
+What is extension?
+
+ extension is , project dependency- jar dependency.
+
+By default, you can have extensions, when we create new project.
+
+Think of Quarkus extensions are as your project dependencies.
+
+Extensions configure,boot and integrate a framework or technology into your quarkus application.
+
+They also do all of the heavy lifting of providing the right information to Graalvm For application to compile nativly.
+
+
+How do you manage extensions?
+  Management means - add,removing,list extensions
+
+There are two way to get  extensions?
+
+1.via maven or gradle
+2.via cli -quarkus command.
+
+
+  extension, ext          Configure extensions of an existing project.
+    list, ls              List platforms and extensions.
+    categories, cat       List extension categories.
+    add                   Add extension(s) to this project.
+    remove, rm            Remove extension(s) from this project.
+
+ext ls
+  to list current dependencies(extensions) in your project.
+
+G:\IBM\2024\Aug\Quarkus\restfullwebservices\restapp>quarkus ext ls
+Looking for the newly published extensions in registry.quarkus.io
+Current Quarkus extensions installed:
+
+? ArtifactId                                         Extension Name
+? quarkus-rest                                       REST
+
+https://quarkus.io/extensions/
+
+How to add extension?
+  JSON Parser - jackson
+
+  quarkus ext add io.quarkus:quarkus-rest-jackson
+
+./mvnw quarkus:add-extension -Dextensions="io.quarkus:quarkus-rest-jackson"
+
+../gradlew addExtension --extensions="io.quarkus:quarkus-rest-jackson"
+
+
+eg:
+package com.ibm.rest.api.payload;
+
+import com.ibm.rest.api.payload.entity.Teacher;
+import jakarta.ws.rs.POST;
+import jakarta.ws.rs.Path;
+
+@Path("teacher")
+public class TeacherResource {
+
+    @POST
+    public String save(Teacher teacher){
+        System.out.println(teacher);
+        return "saved";
+    }
+}
+
+Now you test rest api, you can see the data is coming.
