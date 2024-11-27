@@ -1,6 +1,6 @@
 
 			      Quarkus
-....................................................................................
+..................................................................................................
 
 What is Quarkus?
   Quarkus is java or JEE frame work and platform to build "modern cloud native" or "container native" or desktop "native java applications".
@@ -755,4 +755,71 @@ public class UniPipeDataPipeLine {
                 .subscribe().with(System.out::println);
     }
 }
-..................................................................................
+..................................................................................................
+									 Multi - Streaming
+..................................................................................................
+Flow of data  from producer to consumer/subscriber.
+
+package com.ibm.reactive;
+
+import io.smallrye.mutiny.Multi;
+
+import java.util.List;
+
+public class CollectionEvents {
+    public static void main(String[] args) {
+        List mylist = List.of(1, 2, 3, 4, 5, 6, 8, 9, 10);
+        //Stream vs Collection
+        //Stream is flow of data from one place to another place while flowing data you can apply
+        //data processing operations like transformation,filtering,modifying,merging .
+        //you create stream ?from where you can create stream -
+        // from collections,future,hardcoded data,from existing java Stream
+        Multi.createFrom().iterable(mylist).subscribe().with(System.out::println);
+    }
+}
+
+
+Filter,select
+
+package com.ibm.reactive;
+
+import io.smallrye.mutiny.Multi;
+
+public class MultiFilteringAndSelection {
+    public static void main(String[] args) {
+        Multi.createFrom().items(1,2,2,3,4,3,9,92,23,23,11,10,87)
+                //take only odd numbers
+                .filter(item -> item % 2 != 0)
+                //from the list of odd numbers take only first 10 items
+                .select().first(10)
+                //no duplicates
+                .select().distinct()
+                //transform those times multiply by 2
+                .onItem().transform(item -> item * 2)
+                .subscribe().with(System.out::println);
+    }
+}
+.............................................................................................
+package com.ibm.reactive;
+
+import io.smallrye.mutiny.Uni;
+
+import java.time.Duration;
+
+public class ErrorHandler {
+    public static void main(String[] args) {
+        Uni.createFrom().failure(new RuntimeException("oops")).subscribe().with(data -> {
+        }, err -> {
+            System.out.println(err);
+        });
+        Uni.createFrom().failure(new RuntimeException("oops"))
+                .onFailure().recoverWithItem("fallback")
+                .onItem().delayIt().by(Duration.ofMillis(5000))
+                .subscribe().with(data -> {
+                    System.out.println(data);
+                });
+    }
+}
+..................................................................................................
+										Quarkus Setup
+.................................................................................................
