@@ -156,7 +156,7 @@ jakarata.ws.rs
 @PUT -  http put
 @DELETE - http delete.
 .....................................................................................
-			  CURD operation
+			                   CURD operation
 ...................................................................................
 
 
@@ -512,3 +512,171 @@ public class TeacherResource {
 }
 
 Now you test rest api, you can see the data is coming.
+...............................................................................................
+...................................................................................
+				Responses
+..................................................................................		
+What can be response?
+
+REST API return any one of the following as type
+
+1.String - plain/text
+2.Objects/Collections - application/json , application/xml
+3.void - No Return type , only Status - No Content
+4.Response - Response Object
+5.Reactive Type - Uni or Multi - Non Blocking api is enabled...
+
+
+String:
+@Path("/hello")
+public class GreetingResource {
+
+    @GET
+    @Produces(MediaType.TEXT_PLAIN)
+    public String hello() {
+        return "Hello from Quarkus REST";
+    }
+}
+
+Return objects and Collections:
+................................
+package com.ibm.rest.api.payload;
+
+import com.ibm.rest.api.payload.entity.Teacher;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.POST;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.MediaType;
+
+import java.util.List;
+
+@Path("teacher")
+public class TeacherResource {
+
+    //Return single Teacher
+    @GET
+    @Produces(MediaType.APPLICATION_JSON)
+    public Teacher getTeacher() {
+        return new Teacher(1l, "Subramanian", "Quarkus");
+    }
+
+    //Return Collection
+    @GET
+    @Path("list")
+    public List<Teacher> getTeachers() {
+        List<Teacher> teacherList = List.of(
+                new Teacher(1l, "Subramanian", "Quarkus"),
+                new Teacher(2l, "Murugan", "Quarkus"),
+                new Teacher(3l, "Karthik", "Spring Framework")
+        );
+        return teacherList;
+    }
+}
+....................................................................................
+			void
+...................................................................................
+
+if you are writing delete operation , if delete success i want to send only status code.
+    @DELETE
+    @Path("{Id}")
+    public void remove(@PathParam("Id") Long id) {
+        //return status is 204-No content
+        System.out.println("delete by Id" + id);
+    }
+.....................................................................................
+							Response - Response Object
+
+
+What is Advantage over Objects when we "Response" Object.
+
+You can send additional information along with response, like custom headers,tokens, some resource information.
+
+Response Object
+  Response Object used to send "Payload" along with meta data(http status code, other informations)
+
+HTTP Status Code:
+1.informational status  100 to 199- 1X
+2.success response -  200 - 299 - 2X
+3.Redirects - 300-399 - 3X
+4.Client Errors - 400-499 - 4X
+5.Server errors - 500 - 599 - 5X
+
+Response Class:
+Response is abstract class contains two factory api..
+
+public abstract Object getEntity()
+public abstract int getStatus()
+
+Builder class:
+
+public static ResponseBuilder status(int status)
+public static ResponseBuilder ok()
+
+
+
+package com.ibm.rest.api.returntypes.response;
+
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+
+@Path("items")
+@Produces(MediaType.APPLICATION_JSON)
+@Consumes(MediaType.APPLICATION_JSON)
+public class ItemResource {
+
+    private List<Item> items = new ArrayList<>();
+    private int currentId = 1;
+
+    @GET
+    public List<Item> getAllItems() {
+        return items;
+    }
+
+    @POST
+    public Response saveItem(Item item) {
+        item.setId(currentId++);
+        items.add(item);
+        return Response.status(Response.Status.CREATED).entity(item).build();
+    }
+
+    //getBy id
+    @GET
+    @Path("{id}")
+    public Response getItemById(@PathParam("id") int id) {
+        Optional<Item> item = items.stream().filter(i -> i.getId() == id).findFirst();
+        if (item.isPresent()) {
+            return Response.ok().entity(item.get()).build();
+        }
+        return Response.status(Response.Status.NOT_FOUND).build();
+    }
+
+    //update logic
+    @PUT
+    @Path("{id}")
+    public Response updateItem(@PathParam("id") int id, Item updatedItem) {
+        Optional<Item> item = items.stream().filter(i -> i.getId() == id).findFirst();
+        if (item.isPresent()) {
+            item.get().setName(updatedItem.getName());
+            return Response.ok().entity(item.get()).build();
+        }
+        return Response.status(Response.Status.NOT_FOUND).build();
+    }
+
+    //delete Logic
+    @DELETE
+    @Path("{id}")
+    public Response removeItem(@PathParam("id") int id) {
+        boolean removed = items.removeIf(item -> item.getId() == id);
+        if (removed) {
+            return Response.noContent().build();
+        }
+        return Response.status(Response.Status.NOT_FOUND).build();
+    }
+
+}
