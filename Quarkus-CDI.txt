@@ -1,0 +1,425 @@
+	      Jakarta Contexts and Dependency Injection 
+...................................................................................
+			 		 Dependency Injection - IOC
+.....................................................................................
+What is IOC?
+ Inversion of Control is design pattern for creating depandent objects and injecting into another.
+
+How IOC is implemented in Spring?
+ Spring Container is the reference implemnetation of IOC design pattern
+
+How IOC is implemented in Quarkus?
+  Quarkus uses JEE spec called CDI - context Dependency Injection
+
+Quarkus and CDI ?
+ Quarkus has not implemented 100% CDI spec due to some reasons.
+
+"Quarkus ArC" is a build-time oriented dependency injection based on CDI 2.0.
+
+Spring and JEE dependencies are resolved "during runtime" only
+
+Quarkus depedencies are resolved "During build time".
+
+
+Spring:
+
+interface A{ }
+
+class A1 implements A{}
+
+class B1 implements A{}
+
+class C {
+  A a;  =  new A1 or B1
+}
+
+Which implementation is picked up and when the implementation is decided. - during runtime -
+
+  Depedencies are resolved during runtime -spring
+  Depedencies are resolved build runtime -Quarkus
+
+
+			Quarkus Application
+				|
+	         Quarkus Arc -layer built on the top of CDI
+				  |
+		  Jakarta Contexts and Dependency Injection
+
+
+JEE CDI Vs Quarkus CDI:
+......................
+
+JEE CDI "resolves" bean dependency during runtime of an application,after deployment, if something goes wrong, errors are reported only during runtime.
+
+Quarkus CDI uses a model called "Build Time"
+
+   During application build process, if there is any dependency missmatch related errors are reported.
+
+Build-time Processing Benefits and Drawbacks:
+..............................................
+
+Fail Fast
+  Beans and dependencies are validated during the build so that your application can never fail in production with common problems such as AmbiguousResolutionException or UnsatisfiedResolutionException.
+
+Instant Startup
+  When the app starts ArC just loads all the metadata and initializes some internal structures. There is no need to analyze the application classes again. This means negligible startup overhead.
+ 
+Minimized Runtime
+  In Quarkus 0.19, ArC plus integration runtime consist of 72 classes and occupies ~ 140 KB in jars. Weld 3.1.1 (CDI Reference Implementation) core is roughly 1200 classes and approx. 2 MB jar. In other words, ArC runtime takes approx. 7% of the Weld runtime in terms of number of classes and jar footprint.
+
+Optimized Code Paths and Metadata Structures
+
+  When generating the metadata classes ArC can sometimes produce leaner and smarter logic because it has the whole application analyzed already. 
+.....................................................................................
+			Core Features of CDI:
+
+1.Bean: What is Bean?
+
+Bean is java object
+
+Types of Beans:
+
+1.Application Beans(pojos)
+   Objects are created by developer 
+   Objects life cycle is managed by developer and JVM
+
+2.Container managed Bean
+   Objects created by the Container
+
+What is container?
+   Container is runtime where quarkus apps are running.
+   Object life cycle are managed by Runtime 
+
+What are the advantages of Container Managed Bean?
+
+>The developer can focus application logic.
+....................................................................................
+....................................................................................
+
+			 CDI implemenation
+...................................................................................
+
+CDI is implemented via "Annotations"
+
+
+Apis in cdi:
+
+1.jakarta.inject
+2.jakarta.enterprise.inject - core di apis
+3.jakarta.enterprise.context - scope and contextuaal apis
+4.jakarta.enterprise.events -  publishing events and listening events-  container wide event driven programming
+5.jakarta.enterprise.util
+6.jakarta.interceptor
+
+Common Annoations:
+
+1.@Inject  
+2.@Qualifer
+3.LifeCycle of Bean
+   @ApplicationScoped =@component,@Bean,@Service......
+   @SessionScoped
+   @RequestScoped
+   @SingleTon
+
+ApplicationScoped vs SingleTon
+ Both are same - single instance across the application
+ but SingleTon beans not available inside testing env..
+ 
+4.@Observes - event listner - StartupEvent
+
+...................................................................................
+			Quarkus Application Archiecture
+...................................................................................
+
+There are two layers
+
+1.controllers
+   Using Rest api
+2.services
+   Using plain java class called services...
+
+
+Steps:
+1.create quarkus app for CDI
+
+quarkus create app cdi-app
+
+Use case: Without CDI , how to create bean and use
+
+package com.ibm.cdi.services;
+
+import java.util.List;
+
+public class UserService {
+
+    public List<String> users(){
+        return List.of("Subramanian","Murugan");
+    }
+}
+package com.ibm.cdi.controller;
+
+import com.ibm.cdi.services.UserService;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+
+import java.util.List;
+
+@Path("users")
+public class UserResource {
+    UserService userService = new UserService();
+
+    @GET
+    public List<String> users() {
+        return userService.users();
+    }
+}
+
+The class "UserService" is called Bean class- Application Bean- we have to create instance of this class.
+
+Quarkus recommends to apply "IOC" principle: Dont create object by yourself. ask the container to create and manage- just use create object : Container Managed Bean
+
+
+Service class need to be annotated using the following any one of the annoations
+
+@ApplicationScoped
+@SingleTon
+
+These annotations marks the class , so that the container creates object automatically and make it available ready for use.
+
+
+package com.ibm.cdi.services;
+
+import jakarta.enterprise.context.ApplicationScoped;
+
+import java.util.List;
+
+@ApplicationScoped
+public class UserService {
+
+    public List<String> users() {
+        return List.of("Subramanian", "Murugan");
+    }
+}
+
+
+
+package com.ibm.cdi.controller;
+
+import com.ibm.cdi.services.UserService;
+import io.vertx.ext.auth.User;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+
+import java.util.List;
+
+@Path("users")
+public class UserResource {
+  //  UserService userService = new UserService();
+    @Inject
+    private UserService userService;
+
+    @GET
+    public List<String> users() {
+        return userService.users();
+    }
+}
+
+.....................................................................................	     		Types of Injection in Quarkus  -Injection Points
+
+1.Field Injection
+2.Setter Injection
+3.Constructor injection
+
+Quarkus supports all types of injection but recommened only "Field Injection"
+
+1.Field Injection
+ Injecting references at top of the variable declaration
+
+@Path("users")
+public class UserResource {
+  //  UserService userService = new UserService();
+    @Inject
+    private UserService userService;
+
+    @GET
+    public List<String> users() {
+        return userService.users();
+    }
+}
+
+2.Setter Injection
+import com.ibm.cdi.services.UserService;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+
+import java.util.List;
+
+@Path("users")
+public class UserResource {
+  //  UserService userService = new UserService();
+//    @Inject
+//    private UserService userService;
+
+    private UserService userService;
+
+    @Inject
+    public void setUserService(UserService userService) {
+        this.userService = userService;
+    }
+
+    @GET
+    public List<String> users() {
+        return userService.users();
+    }
+}
+
+3.Constructor Injection
+
+package com.ibm.cdi.controller;
+
+import com.ibm.cdi.services.UserService;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+
+import java.util.List;
+
+@Path("users")
+public class UserResource {
+  //  UserService userService = new UserService();
+//    @Inject
+//    private UserService userService;
+
+    private UserService userService;
+
+//    @Inject
+//    public void setUserService(UserService userService) {
+//        this.userService = userService;
+//    }
+
+
+    @Inject
+    public UserResource(UserService userService) {
+        this.userService = userService;
+    }
+
+    @GET
+    public List<String> users() {
+        return userService.users();
+    }
+}
+...........
+
+Without using private is also recommended.
+
+package com.ibm.cdi.controller;
+
+import com.ibm.cdi.services.UserService;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+
+import java.util.List;
+
+@Path("users")
+public class UserResource {
+    @Inject
+    UserService userService;
+
+    @GET
+    public List<String> users() {
+        return userService.users();
+    }
+}
+...................................................................................
+			Injecting multiple dependencies
+...................................................................................
+package com.ibm.cdi.services;
+
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+
+@ApplicationScoped
+public class HaiService {
+
+    public String sayHai(){
+        return  "Hai";
+    }
+}
+
+package com.ibm.cdi.services;
+
+import jakarta.enterprise.context.ApplicationScoped;
+
+@ApplicationScoped
+public class HelloService {
+    public String sayHello(){
+        return  "Hello";
+    }
+}
+
+package com.ibm.cdi.controller;
+
+import com.ibm.cdi.services.HaiService;
+import com.ibm.cdi.services.HelloService;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+
+@Path("welcome")
+public class WelcomeResource {
+
+    @Inject
+    HaiService haiService;
+    @Inject
+    HelloService helloService;
+
+    @GET
+    public String welcome(){
+        return helloService.sayHello() + " " + haiService.sayHai();
+    }
+}
+.....................................................................................
+			  Interface based Injection
+.....................................................................................
+
+Interface with single class Implementation
+package com.ibm.cdi.services;
+
+public interface NumberGenerator {
+    String generateISBNGenerator();
+}
+
+Implemenation:
+package com.ibm.cdi.services;
+
+import jakarta.enterprise.context.ApplicationScoped;
+
+@ApplicationScoped
+public class ISBNGeneratorImpl implements NumberGenerator {
+    @Override
+    public String generateISBNGenerator() {
+        return "2232323232323";
+    }
+}
+
+package com.ibm.cdi.controller;
+
+import com.ibm.cdi.services.NumberGenerator;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+
+@Path("books")
+public class BookResource {
+    //inject
+    @Inject
+    NumberGenerator numberGenerator;
+
+    @GET
+    public String getBOOKISBN() {
+        return numberGenerator.generateISBNGenerator();
+    }
+}
