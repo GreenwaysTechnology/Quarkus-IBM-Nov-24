@@ -680,3 +680,218 @@ public class ItemResource {
     }
 
 }
+..........................................................................................
+								 Reactive Types
+..........................................................................................
+.....................................................................................	
+			 Reactive Response
+....................................................................................
+As we discussed already, Quarkus supports non blocking io arch.
+
+
+Quarkus is running on Vertx Engine
+
+Vertx engine uses non blocking infrastrastructure of the operating system.
+
+Vertx Provides threading model which are two types of threads.
+
+1.Non Blocking threads- Event Loop Threads.
+2.Blocking threads or Worker Pool threads
+
+Non Blocking threads or Event Loop Threads are used to multiplex the incoming requests.
+Vertx Engine provides per cpu core two threads, if i have 12 core, then i would have 24 threads to handle incoming requests.
+
+Worker pool threads are used to handle "Request Per  Thread model" - One request and one thread.
+
+           "By default all Rest api runs on "Worker Pool thread"."
+
+
+Testing Thread:
+................
+package com.ibm.rest.response.thread;
+
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+
+@Path("workerThread")
+public class WorkerThreadResource {
+
+    @GET
+    public String runOnWorker() {
+        System.out.println(Thread.currentThread().getName());
+        return "Hello";
+    }
+
+}
+
+Response:
+executor-thread-1
+
+Here exector-thread-1 is "Blocking thread" meaning that our code is running request per thread model. 
+
+
+How to turn the code into non blocking code?
+
+ How to assign api call to "vertx-event loop threads"
+
+ if your endpoint method needs to accomplish an async or reactive task before being able to answer to the client, you can declare your method to return "Uni/Multi",
+in which case current http request to be turned as non blocking handled by "event loop thread", the current method will not return result immediately rather which suspends current http thread.
+
+package com.ibm.rest.api.threads;
+
+import com.ibm.rest.api.returntypes.response.Item;
+import io.smallrye.mutiny.Uni;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+
+import java.util.List;
+
+@Path("nonblocking")
+public class NonBlockingResource {
+
+    @GET
+    public Uni<String> sayHello() {
+        System.out.println(Thread.currentThread().getName());
+        return Uni.createFrom().item("Hello Reactive");
+    }
+
+    @GET
+    @Path("item")
+    public Uni<Item> getItem() {
+        System.out.println(Thread.currentThread().getName());
+        return Uni.createFrom().item(new Item(1, "Book"));
+    }
+
+    @GET
+    @Path("items")
+    public Uni<List<Item>> getItems() {
+        System.out.println(Thread.currentThread().getName());
+        return Uni.createFrom().item(List.of(new Item(1, "book")));
+    }
+}
+............................................................................................
+							..................................................................................
+						Streaming -Sending item by item
+....................................................................................
+Sending sequence of values over period of time.
+
+How to stream values?
+ Using Multi
+package com.ibm.rest.api.threads;
+
+import com.ibm.rest.api.returntypes.response.Item;
+import io.smallrye.mutiny.Multi;
+import io.smallrye.mutiny.Uni;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.MediaType;
+
+import java.time.Duration;
+import java.util.List;
+
+@Path("streaming")
+public class StreamingResource {
+
+    @GET
+    @Produces(MediaType.SERVER_SENT_EVENTS)
+    public Multi<Long> stream() {
+        return Multi.createFrom().ticks().every(Duration.ofSeconds(1));
+    }
+
+    //list of values
+    @GET
+    @Path("list")
+    @Produces(MediaType.SERVER_SENT_EVENTS)
+    public Multi<Integer> list() {
+        List list = List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+        return Multi.createFrom().iterable(list).onItem().call(i -> {
+            Duration delay = Duration.ofSeconds(1);
+            return Uni.createFrom().nullItem().onItem().delayIt().by(delay);
+        });
+    }
+
+    @GET
+    @Path("items")
+    @Produces(MediaType.SERVER_SENT_EVENTS)
+    public Multi<Item> listOfItems() {
+        List list = List.of(new Item(1, "item1"), new Item(2, "Item 2"));
+        return Multi.createFrom().iterable(list).onItem().call(i -> {
+            Duration delay = Duration.ofSeconds(1);
+            return Uni.createFrom().nullItem().onItem().delayIt().by(delay);
+        });
+    }
+}
+............................................................................................
+						   Reactive Type, List, CURD
+...........................................................................................
+package com.ibm.rest.api.returntypes.response.reactive;
+
+import com.ibm.rest.api.returntypes.response.Item;
+import io.smallrye.mutiny.Multi;
+import io.smallrye.mutiny.Uni;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+
+@Path("reactiveitems")
+public class ItemResource {
+    private List<Item> items = new ArrayList<>();
+    private int currentId = 1;
+
+    //Return all items
+    @GET
+    @Produces(MediaType.SERVER_SENT_EVENTS)
+    public Multi<Item> getAllItems() {
+        return Multi.createFrom().iterable(items);
+    }
+
+    @POST
+    public Uni<Response> createItem(Item item) {
+        return Uni.createFrom().item(() -> {
+            item.setId(currentId++);
+            items.add(item);
+            return Response.status(Response.Status.CREATED).entity(item).build();
+        });
+    }
+
+    @GET
+    @Path("{id}")
+    public Uni<Response> getItemById(@PathParam("id") int id) {
+        return Uni.createFrom().item(() -> {
+            Optional<Item> item = items.stream().filter(i -> i.getId() == id).findFirst();
+            return item.map(i -> Response.ok(i).build()).orElse(Response.status(Response.Status.NOT_FOUND).build());
+        });
+    }
+
+    @PUT
+    @Path("{id}")
+    public Uni<Response> updateItem(@PathParam("id") int id, Item updatedItem) {
+        return Uni.createFrom().item(() -> {
+            Optional<Item> item = items.stream().filter(i -> i.getId() == id).findFirst();
+            if (item.isPresent()) {
+                item.get().setName(updatedItem.getName());
+                return Response.ok(item.get()).build();
+            }
+            return Response.status(Response.Status.NOT_FOUND).build();
+        });
+
+    }
+
+    @DELETE
+    @Path("{id}")
+    public Uni<Response> deleteItem(@PathParam("id") int id) {
+        return Uni.createFrom().item(() -> {
+            boolean removedItem = items.removeIf(item -> item.getId() == id);
+            if (removedItem) {
+                return Response.noContent().build();
+            }
+            return Response.status(Response.Status.NOT_FOUND).build();
+        });
+    }
+
+}
