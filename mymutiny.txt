@@ -1,0 +1,62 @@
+Scenario: Processing a List of User Data for Notifications
+A system needs to send notifications to a list of users after retrieving their preferences from a database. SmallRye Mutiny can be used to process this task efficiently by handling multiple streams asynchronously.
+
+
+Steps & Example Code:
+Input: A list of user IDs.
+
+Task:
+
+Fetch user preferences (asynchronous call).
+Process the preferences.
+Send notifications based on the preferences
+
+package com.ibm.reactive;
+
+
+import io.smallrye.mutiny.Multi;
+import io.smallrye.mutiny.Uni;
+
+import java.time.Duration;
+import java.util.List;
+
+public class MultiDataPipeLines {
+    public static void main(String[] args) {
+        // Example list of user IDs
+        List<String> userIds = List.of("user1", "user2", "user3");
+
+        // Create a Multi from the list
+        Multi.createFrom().iterable(userIds)
+                .onItem().transformToUniAndMerge(userId -> getUserPreferences(userId)
+                        .onItem().transformToUni(preferences -> sendNotification(userId, preferences)))
+                .subscribe().with(
+                        success -> System.out.println("Notification sent: " + success),
+                        failure -> System.err.println("Failed to process: " + failure)
+                );
+    }
+
+    // Simulate fetching user preferences (asynchronous)
+    private static Uni<String> getUserPreferences(String userId) {
+        return Uni.createFrom().item(() -> "Preferences for " + userId)
+                .onItem().delayIt().by(Duration.ofMillis(1000)); // Simulated delay
+    }
+
+    // Simulate sending a notification (asynchronous)
+    private static Uni<Boolean> sendNotification(String userId, String preferences) {
+        return Uni.createFrom().item(() -> {
+            System.out.println("Sending notification to " + userId + " with " + preferences);
+            return true;
+        }).onItem().delayIt().by(Duration.ofMillis(1000));// Simulated delay
+    }
+}
+
+Explanation:
+Multi.createFrom().iterable: Converts the list of user IDs into a reactive stream.
+transformToUniAndMerge: Fetches preferences and sends notifications for each user in parallel.
+Delay Simulation: Simulates real-world asynchronous calls (e.g., database or external API).
+subscribe().with(): Handles results and errors.
+Real-Time Use Cases:
+E-commerce: Sending promotional emails to users after fetching preferences.
+IoT Systems: Processing sensor data in parallel and sending alerts.
+Social Media: Notifying users about relevant events or updates.
+This demonstrates how SmallRye Mutiny simplifies processing multiple tasks asynchronously while managing reactive streams efficiently.
