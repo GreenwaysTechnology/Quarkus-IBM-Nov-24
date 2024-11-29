@@ -423,3 +423,197 @@ public class BookResource {
         return numberGenerator.generateISBNGenerator();
     }
 }
+.............................................................................................
+..,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,......................
+						Single Interface with Multiple Beans
+.....................................................................................
+package com.ibm.cdi.services;
+
+public interface Repository {
+    String findAll();
+}
+
+package com.ibm.cdi.services;
+
+import jakarta.enterprise.context.ApplicationScoped;
+
+@ApplicationScoped
+public class SQLRepositoryImpl implements Repository{
+    @Override
+    public String findAll() {
+        return "SQL";
+    }
+}
+package com.ibm.cdi.services;
+
+import jakarta.enterprise.context.ApplicationScoped;
+
+@ApplicationScoped
+public class NoSQLRepositoryImpl implements Repository {
+    @Override
+    public String findAll() {
+        return "NOSQL";
+    }
+}
+
+package com.ibm.cdi.controller;
+
+import com.ibm.cdi.services.Repository;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.Path;
+
+@Path("repository")
+public class RepositoryResource {
+
+    @Inject
+    Repository repository;
+
+    public String findAll() {
+        return repository.findAll();
+    }
+}
+
+After Running:
+
+jakarta.enterprise.inject.AmbiguousResolutionException: Ambiguous dependencies for type com.ibm.cdi.services.Repository and qualifiers [@Default]
+	- injection target: com.ibm.cdi.controller.RepositoryResource#repository
+	- declared on CLASS bean [types=[com.ibm.cdi.controller.RepositoryResource, java.lang.Object], qualifiers=[@Default, @Any], target=com.ibm.cdi.controller.RepositoryResource]
+	- available beans:
+		- CLASS bean [types=[com.ibm.cdi.services.Repository, com.ibm.cdi.services.SQLRepositoryImpl, java.lang.Object], qualifiers=[@Default, @Any], target=com.ibm.cdi.services.SQLRepositoryImpl]
+		- CLASS bean [types=[com.ibm.cdi.services.NoSQLRepositoryImpl, com.ibm.cdi.services.Repository, java.lang.Object], qualifiers=[@Default, @Any], target=com.ibm.cdi.services.NoSQLRepositoryImpl]
+	at io.quarkus.arc.processor.Beans.resolveInjectionPoint(Beans.java:554)
+	at io.quarkus.arc.processor.BeanInfo.init(BeanInfo.java:667)
+	at io.quarkus.arc.processor.BeanDeployment.init(BeanDeployment.java:323)
+	at io.quarkus.arc.processor.BeanProcessor.initialize(BeanProcessor.java:167)
+	at io.quarkus.arc.deployment.ArcProcessor.validate(ArcProcessor.java:490)
+
+so Quarkus not able to decide which implementation should be injected.
+
+Solution:
+1.Using Qualifers
+2.@Named Annotation
+
+Qualifers are very complex to implement so we use Named Anntation
+
+
+Using Named Annotation
+package com.ibm.cdi.services;
+
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Named;
+
+@ApplicationScoped
+@Named("sql")
+public class SQLRepositoryImpl implements Repository{
+    @Override
+    public String findAll() {
+        return "SQL";
+    }
+}
+
+package com.ibm.cdi.services;
+
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Named;
+
+@ApplicationScoped
+@Named("nosql")
+public class NoSQLRepositoryImpl implements Repository {
+    @Override
+    public String findAll() {
+        return "NOSQL";
+    }
+}
+
+package com.ibm.cdi.controller;
+
+import com.ibm.cdi.services.Repository;
+import jakarta.inject.Inject;
+import jakarta.inject.Named;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+
+@Path("repository")
+public class RepositoryResource {
+
+    @Inject
+    @Named("nosql")
+    Repository repository;
+
+    @GET
+    public String findAll() {
+        return repository.findAll();
+    }
+}
+.............................................................................................
+							  Bean Initalization life cycle methods
+......................................................................................
+	package com.ibm.cdi.services.lifecycles;
+
+import io.quarkus.runtime.StartupEvent;
+import jakarta.annotation.PostConstruct;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Observes;
+
+import java.util.List;
+
+@ApplicationScoped
+public class UserService {
+    List<String> users;
+
+    @PostConstruct
+    public void init() {
+        users = List.of("Subramanian", "Ram");
+    }
+
+    public void start(@Observes StartupEvent event) {
+        System.out.println("Startup");
+    }
+
+    public List<String> findAll() {
+        return users;
+    }
+}
+....................................................................................
+....................................................................................
+			 Reactive Types and Services
+.....................................................................................
+package com.ibm.cdi.services;
+
+import io.smallrye.mutiny.Uni;
+import jakarta.enterprise.context.ApplicationScoped;
+
+import java.util.List;
+
+@ApplicationScoped
+public class ProductService {
+
+    public Uni<List<String>> findAll() {
+        return Uni.createFrom().item(List.of("Product1", "Product2"));
+    }
+}
+
+package com.ibm.cdi.controller;
+
+import com.ibm.cdi.services.ProductService;
+import io.smallrye.mutiny.Uni;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+
+import java.util.List;
+
+@Path("products")
+public class ProductResource {
+
+    @Inject
+    ProductService productService;
+
+    @GET
+    public Uni<List<String>> findAll() {
+        return productService.findAll();
+    }
+}
+
+
