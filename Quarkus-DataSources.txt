@@ -80,7 +80,7 @@ Drawbacks:
 
 4.As per microservices, apps are loosly coupled, at the same time database also need to be loosly coupled
 ....................................................................................
-			 		 Data base Per service Pattern
+			 					 Data base Per service Pattern
 .....................................................................................
 2.Database Per Service Pattern
 ...............................
@@ -677,3 +677,344 @@ public class CustomerResource {
         return Response.status(204).build();
     }
 }
+............................................................................................
+							 Service class Integration
+............................................................................................
+With Service layer:
+.....................
+package com.ibm.activerecord.services;
+
+import com.ibm.activerecord.entity.Customer;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.transaction.Transactional;
+import jakarta.ws.rs.DELETE;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
+import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.Response;
+
+import java.util.List;
+
+@ApplicationScoped
+public class CustomerService {
+
+    //apis
+    public List<Customer> findAll() {
+        return Customer.listAll();
+    }
+
+    public Customer findById(Integer id) {
+        return Customer.findById(id);
+    }
+
+    @Transactional
+    public void create(Customer customer) {
+        customer.persist();
+    }
+
+    @Transactional
+    public Customer update(Integer id, Customer customer) {
+        if (customer.name == null) {
+            throw new WebApplicationException("Customer Name was not found" + 422);
+        }
+        Customer customerEntity = Customer.findById(id);
+        if (customerEntity == null) {
+            throw new WebApplicationException("Customer with ID of " + id + "does not exits");
+        }
+        customerEntity.name = customer.name;
+        customerEntity.city = customer.city;
+        return customerEntity;
+    }
+
+    @Transactional
+    public Response delete(Long id) {
+        Customer customer = Customer.findById(id);
+        if (customer == null) {
+            throw new WebApplicationException("Customer with ID of " + id + "does not exits");
+
+        }
+        customer.delete();
+        return Response.status(204).build();
+    }
+
+}
+package com.ibm.activerecord.resources;
+
+import com.ibm.activerecord.entity.Customer;
+import com.ibm.activerecord.services.CustomerService;
+import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
+
+import java.util.List;
+
+@Path("customers")
+public class CustomerResource {
+
+    @Inject
+    CustomerService customerService;
+
+    @GET
+    @Produces(MediaType.APPLICATION_JSON)
+    public List<Customer> findAll() {
+        return customerService.findAll();
+    }
+
+    @GET
+    @Path("{id}")
+    public Customer findById(@PathParam("id") Integer id) {
+        Customer customer = customerService.findById(id);
+        if (customer == null) {
+            throw new WebApplicationException("Customer with Id of " + id + " does not exit");
+        }
+        return customer;
+    }
+
+    @POST
+    public Response create(Customer customer) {
+        if (customer.id != null) {
+            throw new WebApplicationException("Id was invalidately set on Request", 422);
+        }
+        customerService.create(customer);
+        return Response.ok(customer).status(201).build();
+    }
+
+    @PUT
+    @Path("{id}")
+    public Customer update(@PathParam("id") Integer id, Customer customer) {
+        Customer customer1 = customerService.update(id, customer);
+        return customer1;
+    }
+
+    @DELETE
+    @Path("{id}")
+    public Response delete(@PathParam("id") Long id) {
+        return customerService.delete(id);
+    }
+
+
+}
+...................................................................................
+			Repository Pattern/DAO pattern
+..................................................................................
+
+Steps :
+
+1.Declare Entity
+
+package com.ibm.dao;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.Id;
+
+@Entity
+public class Employee {
+    @Id
+    @GeneratedValue
+    public Long id;
+    @Column(name = "name")
+    public String name;
+    @Column(name = "city")
+    public String city;
+
+    public Employee() {
+    }
+
+    public Employee(Long id, String name, String city) {
+        this.id = id;
+        this.name = name;
+        this.city = city;
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getCity() {
+        return city;
+    }
+
+    public void setCity(String city) {
+        this.city = city;
+    }
+}
+
+2.Declare Repository class.
+
+package com.ibm.dao.repository;
+
+import com.ibm.dao.enity.Employee;
+import io.quarkus.hibernate.orm.panache.PanacheRepository;
+import jakarta.enterprise.context.ApplicationScoped;
+
+@ApplicationScoped
+public class EmployeeRepository implements PanacheRepository<Employee> {
+    //any curd operations
+}
+
+
+3.Write Resource Class, Do dependency Injection
+
+package com.ibm.dao.resources;
+
+import com.ibm.dao.enity.Employee;
+import com.ibm.dao.repository.EmployeeRepository;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+
+import java.util.List;
+
+@Path("employees")
+public class EmployeeResource {
+    @Inject
+    EmployeeRepository employeeRepository;
+
+    @GET
+    public List<Employee> findAll() {
+        return employeeRepository.listAll();
+    }
+}
+
+
+3.2.Get By Id
+package com.ibm.dao.resources;
+
+import com.ibm.dao.enity.Employee;
+import com.ibm.dao.repository.EmployeeRepository;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
+import jakarta.ws.rs.WebApplicationException;
+
+import java.util.List;
+
+@Path("employees")
+public class EmployeeResource {
+    @Inject
+    EmployeeRepository employeeRepository;
+
+    @GET
+    @Path("{id}")
+    public Employee findById(@PathParam("id") Long id) {
+        Employee employee = employeeRepository.findById(id);
+        if (employee == null) {
+            throw new WebApplicationException("Employee with Id of " + id + " does not exit");
+        }
+        return employee;
+    }
+}
+
+3.3: Create
+package com.ibm.dao.resources;
+
+import com.ibm.dao.enity.Employee;
+import com.ibm.dao.repository.EmployeeRepository;
+import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.Response;
+
+import java.util.List;
+
+@Path("employees")
+public class EmployeeResource {
+    @Inject
+    EmployeeRepository employeeRepository;
+
+    @POST
+    @Transactional
+    public Response create(Employee employee) {
+        if (employee.name == null) {
+            throw new WebApplicationException("Employee creation Error");
+        }
+        employeeRepository.persist(employee);
+        return Response.status(201).entity(employee).build();
+    }
+
+}
+
+3.4.Update
+package com.ibm.dao.resources;
+
+import com.ibm.dao.enity.Employee;
+import com.ibm.dao.repository.EmployeeRepository;
+import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.Response;
+
+import java.util.List;
+
+@Path("employees")
+public class EmployeeResource {
+    @Inject
+    EmployeeRepository employeeRepository;
+
+    @PUT
+    @Path("{id}")
+    @Transactional
+    //update
+    public Employee update(@PathParam("id") Long id, Employee employee) {
+        if (employee.name == null || employee.city == null) {
+            throw new WebApplicationException("Employee Name or city was not set on Request");
+        }
+        Employee employeeEntity = employeeRepository.findById(id);
+
+        if (employeeEntity == null) {
+            throw new WebApplicationException("Employee Id was not found");
+        }
+        employeeEntity.name = employee.name;
+        employeeEntity	.city = employee.city;
+        return employeeEntity;
+    }
+
+}
+
+3.5.Delete
+
+package com.ibm.dao.resources;
+
+import com.ibm.dao.enity.Employee;
+import com.ibm.dao.repository.EmployeeRepository;
+import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.Response;
+
+import java.util.List;
+
+@Path("employees")
+public class EmployeeResource {
+    @Inject
+    EmployeeRepository employeeRepository;
+
+    @DELETE
+    @Path("{id}")
+    @Transactional
+    public Response delete(@PathParam("id") Long id) {
+        Employee employeeEntity = employeeRepository.findById(id);
+        if (employeeEntity == null) {
+            throw new WebApplicationException("Employee not available");
+        }
+        employeeRepository.delete(employeeEntity);
+        return Response.status(204).build();
+    }
+///////////////////////////////////////////////////////////////////////////////////	
