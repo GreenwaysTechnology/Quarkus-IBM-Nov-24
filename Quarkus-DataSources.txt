@@ -1262,5 +1262,152 @@ public class CustomerResource {
     }
 
 }
+...................................................................................
+			DAO pattern with Non Blocking - Reactive
+...................................................................................
+...................................................................................
+			DAO pattern with Non Blocking - Reactive
+...................................................................................
+Steps:
 
+1.package com.ibm.reactive.data.reposiotry;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.Id;
+
+@Entity
+public class Employee {
+    @Id
+    @GeneratedValue
+    public Long id;
+    @Column(name = "name")
+    public String name;
+    @Column(name="city")
+    public String city;
+
+    public Employee() {
+    }
+
+    public Employee(String name, String city) {
+        this.name = name;
+        this.city = city;
+    }
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getCity() {
+        return city;
+    }
+
+    public void setCity(String city) {
+        this.city = city;
+    }
+}
+
+Step 1 : Declare Repository Class
+package com.ibm.reactive.data.reposiotry;
+
+import io.quarkus.hibernate.reactive.panache.PanacheRepository;
+import jakarta.enterprise.context.ApplicationScoped;
+
+@ApplicationScoped
+public class EmployeeRespository implements PanacheRepository<Employee> {
+    
+}
+
+Step 3: REST API 
+
+->You have to inject Repository class
+->When we write "POST,UPDATE,DELETE"  ,we must enable "Transaction" via "@WithTransaction" Annotation
+
+Note:
+ IN Nonreactive , we "@Transactional" annotation
+ In Reactive and In DAO, we have to use "@WithTransaction" annotation.
+
+package com.ibm.reactive.data.reposiotry;
+
+import io.quarkus.hibernate.reactive.panache.common.WithTransaction;
+import io.smallrye.mutiny.Uni;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.Response;
+
+import java.util.List;
+
+@Path("employees")
+public class EmployeeResource {
+
+    @Inject
+    EmployeeRespository respository;
+
+    @GET
+    public Uni<List<Employee>> findAll() {
+        return respository.listAll();
+    }
+
+    @GET
+    @Path("{id}")
+    public Uni<Response> getEmployeeById(@PathParam("id") Long id) {
+        return respository.findById(id).onItem().transform(entity -> {
+            if (entity == null) {
+                throw new WebApplicationException("Employee with ID Of " + id + "does not  exits", 404);
+            }
+            return Response.ok(entity).status(200).build();
+        });
+    }
+
+    @POST
+    @WithTransaction //Reactive version of transaction annotation
+    public Uni<Response> create(Employee employee) {
+        //handle error
+        if (employee == null || employee.name == null) {
+            throw new WebApplicationException("Customer Not Found", 400);
+        }
+        return respository.persist(employee).onItem().transform(entity ->
+                Response.ok().status(201).entity(entity).build()
+        );
+    }
+
+    @PUT
+    @Path("{id}")
+    @WithTransaction
+    public Uni<Response> update(@PathParam("id") Long id, Employee employee) {
+        //handle error
+        if (employee == null || employee.name == null) {
+            throw new WebApplicationException("Employee Name was not set on request.", 422);
+        }
+        String query = "city='" + employee.getCity() + "' where id = ?1";
+        System.out.println(query);
+        return respository.update(query, id).onItem().transform(entity ->
+                Response.ok().status(200).entity(entity).build()
+        );
+    }
+
+    //Delete
+    @Path("{id}")
+    @DELETE
+    @WithTransaction
+    public Uni<Response> delete(@PathParam("id") Long id) {
+        return respository.deleteById(id).onItem().transform(isDeleted ->
+                isDeleted ? Response.ok().status(Response.Status.NO_CONTENT).build()
+                        : Response.ok().status(Response.Status.NOT_FOUND).build()
+        );
+    }
+}
 
