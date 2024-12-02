@@ -1018,3 +1018,249 @@ public class EmployeeResource {
         return Response.status(204).build();
     }
 ///////////////////////////////////////////////////////////////////////////////////	
+How to connect external database instead of dev services?
+
+
+Step 1: start database inside docker
+
+Setup Postgresql :
+
+Server:
+
+docker network create mynetwork
+docker run --name postgres-container --network=mynetwork -e POSTGRES_PASSWORD=mysecretpassword -p 5432:5432 -d postgres
+
+Client:
+
+docker exec -it postgres-container psql -U postgres
+
+postgres=# CREATE DATABASE mydatabase;
+CREATE DATABASE
+
+Connect to the Database:
+
+\c mydatabase
+
+Show tables:
+\dt
+
+Select rows:
+Select * from customer
+............................................................................................
+									///////////////////////////////////////////////////////////////////////////////////	
+						NonBlocking/Reactive Hibernate ORM Panache
+....................................................................................
+
+Steps:
+
+Steps:
+1.create new app
+  quarkus create app reactive-datasource
+
+2.Dependencies
+  quarkus ext add io.quarkus:quarkus-rest-jackson
+  quarkus ext add io.quarkus:quarkus-hibernate-reactive-panache
+  quarkus ext add io.quarkus:quarkus-reactive-pg-client
+
+ <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-rest</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-rest-jackson</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-hibernate-reactive-panache</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-reactive-pg-client</artifactId>
+    </dependency>
+
+}
+....................................................................................
+			Active Record Pattern
+....................................................................................
+
+Steps:
+
+1.Active Record Pattern
+
+package com.ibm.activerecord.entity;
+
+import io.quarkus.hibernate.reactive.panache.PanacheEntity;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+
+@Entity
+public class Customer  extends PanacheEntity {
+    @Column(name = "name")
+    public String name;
+    @Column(name = "city")
+    public String city;
+}
+
+
+src/resources/import.sql
+INSERT INTO CUSTOMER(id,name,city) VALUES (1, 'Subramanian','Coimbatore');
+INSERT INTO CUSTOMER(id,name,city) VALUES (2, 'Murugan','Coimbatore');
+INSERT INTO CUSTOMER(id,name,city) VALUES (3, 'Geetha','Chennai');
+ALTER SEQUENCE customer_seq RESTART WITH 4;
+
+2.Resource:
+
+2.1.FindAll
+package com.ibm.activerecord.resources;
+
+import com.ibm.activerecord.entity.Customer;
+import io.smallrye.mutiny.Uni;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+
+import java.util.List;
+
+@Path("customers")
+public class CustomerResource {
+
+    @GET
+    public Uni<List<Customer>> findAll() {
+        return Customer.listAll();
+    }
+
+
+}
+
+2.2.Find By Id
+package com.ibm.activerecord.resources;
+
+import com.ibm.activerecord.entity.Customer;
+import io.smallrye.mutiny.Uni;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
+import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.Response;
+
+import java.util.List;
+
+@Path("customers")
+public class CustomerResource {
+
+    @Path("{id}")
+    @GET
+    public Uni<Response> findById(@PathParam("id") Long id) {
+        return Customer.findById(id).onItem().transform(entity -> {
+            if (entity == null) {
+                throw new WebApplicationException("Entity Not found");
+            }
+            return Response.ok(entity).build();
+        });
+    }
+
+
+}
+
+2.3.Active Pattern Post with Transaction:
+....................................
+
+Note :
+ We cant use any annotations...
+
+Panche.withTransaction
+
+package com.ibm.activerecord.resources;
+
+import com.ibm.activerecord.entity.Customer;
+import io.quarkus.hibernate.reactive.panache.Panache;
+import io.smallrye.mutiny.Uni;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.Response;
+
+import java.util.List;
+
+@Path("customers")
+public class CustomerResource {
+
+
+    @POST
+    public Uni<Response> create(Customer customer) {
+        if (customer == null) {
+            throw new WebApplicationException("Customer Not found");
+
+        }
+        return Panache.withTransaction(customer::persist)
+                .replaceWith(Response.status(201).entity(customer).build());
+    }
+
+}
+
+2.4.Update
+package com.ibm.activerecord.resources;
+
+import com.ibm.activerecord.entity.Customer;
+import io.quarkus.hibernate.reactive.panache.Panache;
+import io.smallrye.mutiny.Uni;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.Response;
+
+import java.util.List;
+
+@Path("customers")
+public class CustomerResource {
+
+    @PUT
+    @Path("{id}")
+    public Uni<Response> update(@PathParam("id") Long id, Customer customer) {
+        if (customer == null) {
+            throw new WebApplicationException("Customer Not Found");
+        }
+        return Panache.withTransaction(() -> {
+            return Customer.<Customer>findById(id)
+                    .onItem()
+                    .ifNotNull()
+                    .invoke(entity -> {
+                        //update logic
+                        entity.city = customer.city;
+                        entity.name = customer.name;
+                    })
+                    .onItem()
+                    .ifNotNull()
+                    .transform(entity -> Response.ok(entity).status(200).build())
+                    .onItem()
+                    .ifNull()
+                    .continueWith(Response.status(Response.Status.NOT_FOUND)::build);
+        });
+    }
+
+}
+
+2.5.Delete:
+
+package com.ibm.activerecord.resources;
+
+import com.ibm.activerecord.entity.Customer;
+import io.quarkus.hibernate.reactive.panache.Panache;
+import io.smallrye.mutiny.Uni;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.Response;
+
+import java.util.List;
+
+@Path("customers")
+public class CustomerResource {
+
+    @DELETE
+    @Path("{id}")
+    public Uni<Response> delete(@PathParam("id") Long id) {
+        return Panache.withTransaction(() ->
+                Customer.deleteById(id).map(isDeleted -> isDeleted ? Response.ok().status(Response.Status.NO_CONTENT).build()
+                        : Response.status(Response.Status.NOT_FOUND).build()
+                )
+        );
+    }
+
+}
+
+
