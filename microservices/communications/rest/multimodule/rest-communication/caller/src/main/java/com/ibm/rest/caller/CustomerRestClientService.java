@@ -3,7 +3,7 @@ package com.ibm.rest.caller;
 import jakarta.ws.rs.*;
 import org.eclipse.microprofile.rest.client.inject.RegisterRestClient;
 
-@RegisterRestClient
+@RegisterRestClient(configKey = "customers-api")
 @Path("customers")
 public interface CustomerRestClientService {
     //curd operation signature

@@ -37,7 +37,7 @@ Quarkus Implementations:
 
 3.Java 11 HTTPClient -Blocking and Non blocking way...
 ....................................................................................
-					MicroProfile Rest client specification
+			MicroProfile Rest client specification
 ....................................................................................
 
 In Service Communications, there would be two actors
@@ -397,3 +397,83 @@ public class CustomerRestProxyResource {
         return client.remove(id);
     }
 }
+....................................................................................
+			 Vertx Web Client-By Default Reactive
+....................................................................................
+
+Why Vert.x WebClient?
+
+1.Vertx WebClient by default reactive
+2.You dont need any extra interfaces and application.properties configuration
+3.You can use WebClient directly.
+
+How to use vertx WebClient?
+        <dependency>
+            <groupId>io.smallrye.reactive</groupId>
+            <artifactId>smallrye-mutiny-vertx-web-client</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-vertx</artifactId>
+        </dependency>
+
+
+package com.ibm.caller;
+
+import io.quarkus.runtime.StartupEvent;
+import io.smallrye.mutiny.Uni;
+import io.vertx.ext.web.client.WebClientOptions;
+import io.vertx.mutiny.core.Vertx;
+import io.vertx.mutiny.ext.web.client.HttpResponse;
+import jakarta.enterprise.event.Observes;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+import io.vertx.mutiny.ext.web.client.WebClient;
+
+@Path("api/webclient")
+public class CustomerWebClientResource {
+
+    @Inject
+    Vertx vertx;
+    WebClient webClient;
+
+    public void init(@Observes StartupEvent startupEvent) {
+        //create instance of web client
+        webClient = WebClient.create(vertx, new WebClientOptions().setDefaultHost("localhost").setDefaultPort(8081));
+    }
+
+    //write api to call callee
+    @GET
+    public Uni<String> findAll() {
+        return webClient.get("/customers").send().onItem().transform(HttpResponse::bodyAsString);
+    }
+
+}
+
+....................................................................................
+			Using OpenAPI and Swagger UI
+
+What is open API?
+  It is standard for describing the documentation for HTTP apis
+https://www.openapis.org/
+
+What is Swagger UI?
+   UI browser based app, which can be used to test rest api.
+
+You can add open api extension in any rest api
+
+Dependency:
+
+quarkus extension add quarkus-smallrye-openapi
+
+http://localhost:8081/q/openapi
+
+http://localhost:8082/q/swagger-ui/#/
+
+
+
+
+
+
+
