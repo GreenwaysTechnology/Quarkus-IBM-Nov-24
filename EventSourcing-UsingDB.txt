@@ -1,0 +1,449 @@
+.....................................................................................
+		  Messaging Patterns and Event Driven Microservices
+.....................................................................................
+1.Event Sourcing and Domain Event:
+  
+ Event Driven Microservices are very usefull in many use cases.
+
+1.Distributed Database Transactions.
+
+Messaging Patterns Lead other Event Driven Design patterns
+
+1.Event Sourcing and Domain Event:
+..................................
+
+Context:
+A service command typically needs to create/update/delete aggregates in the database and send messages/events to a message broker(db/any message broker). 
+
+Service Command:
+  Service methods 
+
+Service Methods:
+
+1.Read - SELECT (Query)
+2.Write- INSERT,UPDATE,DELETE (Command)
+
+aggregates:
+ Object - Entity
+
+For Eg:
+ You have OrderService, which has commands
+  saveOrder
+  updateOrder 
+  deleteOrder
+These commands will perform database operations.
+
+Once database operations are over, we need to send/publish event into "Message Brokers (Kafka,RabbitMQ)"
+
+Domain Event:
+  It is similar to Event Sourcing Design pattern only but it depends on the "Domain Driven Design"
+
+
+DOMAIN EVENT VS EVENT SOURCING
+ 
+ Both are same.
+
+ Why 2.
+
+they differ how we can design "event".
+
+In Domain event  event is designed based on "DDD" - Domain Driven design.
+event sourcing event is designed based on our own pattern.
+
+Typically event is object
+....................................................................................
+		Event Sourcing Design pattern Implementation
+....................................................................................
+
+There are many ways to implement event sourcing.
+
+1.Using database itself
+  Without using any message broker, we can store events inside database itself.
+
+2.Using Message Broker
+  To store events we can use Message Broker like Kafka,RabbitMQ.
+
+3.Using Message Broker and Database using "CDC"
+   To store events we use database , from database , we send events to brokers using technoloy called "Change Data Capture".
+
+
+Why Event Sourcing?
+
+=>Loosly coupled systems.
+
+Use case:
+
+Ram and raj both are friends who running small biz where both can sell products.
+when ever product is sold, we have to update inventory, when ever we buy  product we need to update inventory. 
+
+ - when product is bought, inventory need to be added
+ - when product is sold , inventory need to be deducted.
+
+
+POST  /stock
+
+ {
+  name:'x'
+  qty:10
+ 
+ }
+ - we need to insert data into product table- qty 10,name
+
+
+POST  /stock
+
+ {
+  name:'x'
+  qty:5
+ 
+ }
+- we need to insert data into product table- qty 5,name
+
+select * from stock
+  x,15
+
+ram decided to change the software design.
+
+ inital design was to update stock qty, the same row is updated every biz transaction.
+
+when ever  or who ever add/remove stock, we need to capture that activity(event).
+
+
+Now we need to have two tables one is stock table, events table.
+.....................................................................................
+
+Step up:
+Steps:
+
+1.create project 
+
+ quarkus create app event-sourcing
+
+2.depedencies
+     <dependency>
+      <groupId>com.google.code.gson</groupId>
+      <artifactId>gson</artifactId>
+      <version>2.11.0</version>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-jdbc-postgresql</artifactId>
+    </dependency>
+   <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-rest</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-rest-jackson</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-hibernate-orm-panache</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.projectlombok</groupId>
+      <artifactId>lombok</artifactId>
+      <version>1.18.32</version>
+      <scope>provided</scope>
+    </dependency>
+
+start postgre database:
+
+docker-compose.yml
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:latest
+    container_name: postgres_server
+    environment:
+      POSTGRES_USER: your_username
+      POSTGRES_PASSWORD: your_password
+      POSTGRES_DB: your_database
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin_client
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin_password
+    ports:
+      - "8080:80"
+
+volumes:
+  postgres_data:
+
+
+application.properties
+## PostgreSQL Configuration
+quarkus.datasource.db-kind=postgresql
+quarkus.datasource.username=your_username
+quarkus.datasource.password= your_password
+quarkus.datasource.jdbc.url=jdbc:postgresql://localhost:5432/your_database
+#
+## Hibernate ORM Configuration
+quarkus.hibernate-orm.database.generation=create-update
+quarkus.hibernate-orm.log.sql=true
+quarkus.datasource.jdbc.max-size=20
+quarkus.datasource.jdbc.min-size=5
+
+Steps to Create a Database in pgAdmin
+1. Access pgAdmin
+Open your browser and navigate to http://localhost:8080 (or the port you set in your docker-compose.yml).
+Log in using the credentials defined in the PGADMIN_DEFAULT_EMAIL and PGADMIN_DEFAULT_PASSWORD environment variables.
+2. Connect to the PostgreSQL Server
+In the left panel (Object Browser), right-click on Servers.
+
+Click Create > Server.
+
+Fill in the details:
+
+General Tab:
+Name: Choose a name for the server (e.g., "Postgres Local").
+Connection Tab:
+Hostname/Address: postgres (if using Docker Compose) or localhost (if connecting from your local machine).
+Port: 5432 (default PostgreSQL port).
+Maintenance Database: postgres (default).
+Username: Your POSTGRES_USER from the docker-compose.yml file.
+Password: Your POSTGRES_PASSWORD.
+Click Save. The server should now appear in the Object Browser.
+
+3. Create a New Database
+Expand the connected server in the Object Browser.
+Right-click on Databases.
+Select Create > Database.
+Fill in the form:
+Database Name: Enter a name for your database (e.g., my_database).
+Owner: Select the owner (usually the same as your POSTGRES_USER).
+Click Save.
+4. Verify the Database
+Expand the Databases node under the connected server in the Object Browser.
+You should see the newly created database listed.
+...........................................................................
+
+1.Entities:
+Stock table and events table
+
+package com.ibm.eventsourcing.db;
+
+import jakarta.persistence.*;
+import lombok.Data;
+
+@Entity
+@Table(name = "stock")
+@Data
+public class Stock {
+    @Id
+    @GeneratedValue
+    public Long id;
+    @Column(name = "name")
+    public String name;
+    @Column(name = "qty")
+    public int quantity;
+    @Column(name = "userName")
+    public String user;
+}
+
+package com.ibm.eventsourcing.db;
+
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import lombok.Data;
+
+import java.time.LocalDateTime;
+
+@Data
+@Entity
+@Table(name = "events")
+public class EventStore {
+    @Id
+    @GeneratedValue
+    public long eventId;
+    public String eventType;
+    public String entityId;
+    public String eventData;
+    public LocalDateTime eventTime;
+}
+
+package com.ibm.eventsourcing.db;
+
+import io.quarkus.hibernate.orm.panache.PanacheRepository;
+import jakarta.enterprise.context.ApplicationScoped;
+
+import java.util.List;
+
+@ApplicationScoped
+public class StockRepository implements PanacheRepository<Stock> {
+    public List findByName(String name) {
+        return list("name", name);
+    }
+}
+package com.ibm.eventsourcing.db;
+
+import io.quarkus.hibernate.orm.panache.PanacheRepository;
+import jakarta.enterprise.context.ApplicationScoped;
+
+@ApplicationScoped
+public class EventStoreRepository implements PanacheRepository<EventStore> {
+}
+Event Record Design:
+....................
+package com.ibm.eventsourcing.db;
+
+public interface StockEvent {
+}
+
+package com.ibm.eventsourcing.db;
+
+import lombok.Builder;
+import lombok.Data;
+
+@Data
+@Builder
+public class StockAddedEvent implements StockEvent {
+    private Stock stockDetails;
+}
+
+
+package com.ibm.eventsourcing.db;
+
+
+import lombok.Builder;
+import lombok.Data;
+
+@Builder
+@Data
+public class StockRemovedEvent implements StockEvent {
+    private Stock stockDetails;
+}
+package com.ibm.eventsourcing.db;
+
+
+import lombok.Builder;
+import lombok.Data;
+
+@Data
+@Builder
+public class StockUpdatedEvent implements StockEvent{
+    private Stock stockDetails;
+}
+
+package com.ibm.eventsourcing.db;
+
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+@ApplicationScoped
+public class EventService {
+    @Inject
+    EventStoreRepository repository;
+    public void addEvent(StockAddedEvent event) throws JsonProcessingException {
+        EventStore eventStore = new EventStore();
+        eventStore.setEventData(new ObjectMapper().writeValueAsString(event.getStockDetails()));
+        eventStore.setEventType("STOCK_ADDED");
+        eventStore.setEntityId(event.getStockDetails().getName());
+        eventStore.setEventTime(LocalDateTime.now());
+        //this will store every stock added event into table..
+        repository.persist(eventStore);
+    }
+    public void addEvent(StockUpdatedEvent event) throws JsonProcessingException {
+        EventStore eventStore = new EventStore();
+        eventStore.setEventData(new ObjectMapper().writeValueAsString(event.getStockDetails()));
+        eventStore.setEventType("STOCK_UPDATED");
+        eventStore.setEntityId(event.getStockDetails().getName());
+        eventStore.setEventTime(LocalDateTime.now());
+        //this will store every stock added event into table..
+        repository.persist(eventStore);
+    }
+    public void addEvent(StockRemovedEvent event) throws JsonProcessingException {
+        EventStore eventStore = new EventStore();
+        eventStore.setEventData(new ObjectMapper().writeValueAsString(event.getStockDetails()));
+        eventStore.setEventType("STOCK_REMOVED");
+        eventStore.setEntityId(event.getStockDetails().getName());
+        eventStore.setEventTime(LocalDateTime.now());
+        repository.persist(eventStore);
+    }
+    public List<EventStore> fetchAllEvents() {
+        return repository.listAll();
+    }
+
+}
+
+package com.ibm.eventsourcing.db;
+
+import jakarta.inject.Inject;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+
+import java.util.List;
+
+@Path("events")
+public class EventsResource {
+
+    @Inject
+    EventService eventService;
+
+    @GET
+    public List<EventStore> fetchAllEvents() {
+        return eventService.fetchAllEvents();
+    }
+}
+Check How many products
+
+GET /stock
+
+[
+    {
+        "id": 1,
+        "name": "Android",
+        "quantity": 20,
+        "user": "subramanian"
+    }
+]
+
+Check Events:
+localhost:8080/events
+
+[
+    {
+        "eventId": 1,
+        "eventType": "STOCK_ADDED",
+        "entityId": "Android",
+        "eventData": "{\"id\":1,\"name\":\"Android\",\"quantity\":10,\"user\":\"subramanian\"}",
+        "eventTime": "2024-05-25T16:27:48.219409"
+    },
+    {
+        "eventId": 2,
+        "eventType": "STOCK_UPDATED",
+        "entityId": "Android",
+        "eventData": "{\"id\":1,\"name\":\"Android\",\"quantity\":20,\"user\":\"subramanian\"}",
+        "eventTime": "2024-05-25T16:28:03.343587"
+    },
+    {
+        "eventId": 3,
+        "eventType": "STOCK_UPDATED",
+        "entityId": "Android",
+        "eventData": "{\"id\":1,\"name\":\"Android\",\"quantity\":30,\"user\":\"subramanian\"}",
+        "eventTime": "2024-05-25T16:28:04.620363"
+    },
+    {
+        "eventId": 4,
+        "eventType": "STOCK_REMOVED",
+        "entityId": "Android",
+        "eventData": "{\"id\":1,\"name\":\"Android\",\"quantity\":20,\"user\":\"Android\"}",
+        "eventTime": "2024-05-25T16:28:18.719883"
+    }
+]
