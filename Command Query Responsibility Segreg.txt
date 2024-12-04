@@ -1,0 +1,272 @@
+Command Query Responsibility Segregation (CQRS)
+
+
+1. Entity Class
+
+package org.example;
+
+import io.quarkus.hibernate.orm.panache.PanacheEntity;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Table;
+
+@Entity
+@Table(name = "orders")
+public class Order extends PanacheEntity {
+    public String customerName;
+    public String product;
+    public int quantity;
+    public double price;
+    public String status;
+}
+
+2. Command Service
+package org.example;
+
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.transaction.Transactional;
+
+@ApplicationScoped
+public class OrderCommandService {
+
+    @Transactional
+    public Order createOrder(String customerName, String product, int quantity, double price) {
+        Order order = new Order();
+        order.customerName = customerName;
+        order.product = product;
+        order.quantity = quantity;
+        order.price = price;
+        order.status = "PENDING";
+        order.persist();
+        return order;
+    }
+
+    @Transactional
+    public void updateOrderStatus(Long orderId, String status) {
+        Order order = Order.findById(orderId);
+        if (order == null) {
+            throw new IllegalArgumentException("Order not found with ID: " + orderId);
+        }
+        order.status = status;
+    }
+}
+3. Query Service
+
+package org.example;
+
+import io.quarkus.panache.common.Page;
+import jakarta.enterprise.context.ApplicationScoped;
+import java.util.List;
+
+@ApplicationScoped
+public class OrderQueryService {
+
+    public List<Order> findAllOrders() {
+        return Order.listAll();
+    }
+
+    public Order findOrderById(Long orderId) {
+        return Order.findById(orderId);
+    }
+
+    public List<Order> findOrdersByCustomer(String customerName) {
+        return Order.find("customerName", customerName).list();
+    }
+
+    public List<Order> findOrdersByPriceRange(double minPrice, double maxPrice) {
+        return Order.find("price between ?1 and ?2", minPrice, maxPrice).list();
+    }
+
+    public List<Order> findOrdersWithPagination(int page, int size) {
+        return Order.findAll()
+                    .page(Page.of(page, size))
+                    .list();
+    }
+}
+
+Rest Service;
+package org.example;
+
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
+import java.util.List;
+
+@Path("/orders")
+@Consumes(MediaType.APPLICATION_JSON)
+@Produces(MediaType.APPLICATION_JSON)
+@ApplicationScoped
+public class OrderResource {
+
+    @Inject
+    OrderCommandService commandService;
+
+    @Inject
+    OrderQueryService queryService;
+
+    // Command Endpoints
+    @POST
+    public Response createOrder(Order order) {
+        Order createdOrder = commandService.createOrder(order.customerName, order.product, order.quantity, order.price);
+        return Response.ok(createdOrder).status(Response.Status.CREATED).build();
+    }
+
+    @PUT
+    @Path("/{id}/status")
+    public Response updateOrderStatus(@PathParam("id") Long orderId, @QueryParam("status") String status) {
+        commandService.updateOrderStatus(orderId, status);
+        return Response.ok().status(Response.Status.NO_CONTENT).build();
+    }
+
+    // Query Endpoints
+    @GET
+    public List<Order> getAllOrders() {
+        return queryService.findAllOrders();
+    }
+
+    @GET
+    @Path("/{id}")
+    public Response getOrderById(@PathParam("id") Long orderId) {
+        Order order = queryService.findOrderById(orderId);
+        if (order == null) {
+            return Response.status(Response.Status.NOT_FOUND).entity("Order not found").build();
+        }
+        return Response.ok(order).build();
+    }
+
+    @GET
+    @Path("/customer/{name}")
+    public List<Order> getOrdersByCustomerName(@PathParam("name") String customerName) {
+        return queryService.findOrdersByCustomer(customerName);
+    }
+
+    @GET
+    @Path("/price-range")
+    public List<Order> getOrdersByPriceRange(@QueryParam("min") double minPrice, @QueryParam("max") double maxPrice) {
+        return queryService.findOrdersByPriceRange(minPrice, maxPrice);
+    }
+
+    @GET
+    @Path("/paged")
+    public List<Order> getOrdersWithPagination(@QueryParam("page") int page, @QueryParam("size") int size) {
+        return queryService.findOrdersWithPagination(page, size);
+    }
+}
+
+1. Create Order (POST)
+Method: POST
+URL: http://localhost:8080/orders
+Headers:
+Content-Type: application/json
+Body (raw, JSON format):
+json
+Copy code
+{
+  "customerName": "John Doe",
+  "product": "Laptop",
+  "quantity": 1,
+  "price": 1200
+}
+Expected Response:
+json
+Copy code
+{
+  "id": 1,
+  "customerName": "John Doe",
+  "product": "Laptop",
+  "quantity": 1,
+  "price": 1200,
+  "status": "PENDING"
+}
+
+2. Get All Orders (GET)
+Method: GET
+URL: http://localhost:8080/orders
+Headers: None
+Expected Response:
+json
+Copy code
+[
+  {
+    "id": 1,
+    "customerName": "John Doe",
+    "product": "Laptop",
+    "quantity": 1,
+    "price": 1200,
+    "status": "PENDING"
+  }
+]
+
+3. Get Order by ID (GET)
+Method: GET
+URL: http://localhost:8080/orders/1
+Headers: None
+Expected Response:
+json
+Copy code
+{
+  "id": 1,
+  "customerName": "John Doe",
+  "product": "Laptop",
+  "quantity": 1,
+  "price": 1200,
+  "status": "PENDING"
+}
+4. Update Order Status (PUT)
+Method: PUT
+URL: http://localhost:8080/orders/1/status?status=SHIPPED
+Headers: None
+Body: None
+Expected Response: Status Code 204 (No Content).
+5. Get Orders by Customer Name (GET)
+Method: GET
+URL: http://localhost:8080/orders/customer/John Doe
+Headers: None
+Expected Response:
+json
+Copy code
+[
+  {
+    "id": 1,
+    "customerName": "John Doe",
+    "product": "Laptop",
+    "quantity": 1,
+    "price": 1200,
+    "status": "SHIPPED"
+  }
+]
+6. Get Orders by Price Range (GET)
+Method: GET
+URL: http://localhost:8080/orders/price-range?min=1000&max=2000
+Headers: None
+Expected Response:
+json
+Copy code
+[
+  {
+    "id": 1,
+    "customerName": "John Doe",
+    "product": "Laptop",
+    "quantity": 1,
+    "price": 1200,
+    "status": "SHIPPED"
+  }
+]
+7. Get Orders with Pagination (GET)
+Method: GET
+URL: http://localhost:8080/orders/paged?page=0&size=5
+Headers: None
+Expected Response:
+json
+Copy code
+[
+  {
+    "id": 1,
+    "customerName": "John Doe",
+    "product": "Laptop",
+    "quantity": 1,
+    "price": 1200,
+    "status": "SHIPPED"
+  }
+]

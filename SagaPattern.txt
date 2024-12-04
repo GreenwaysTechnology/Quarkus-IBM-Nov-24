@@ -1,0 +1,501 @@
+				Saga Pattern
+
+
+Order Service: Handles incoming order requests, processes them, and sends them to Kafka.
+
+Payment Service: Listens to order events from Kafka, processes payments, and sends payment status updates back to Kafka.
+
+Order Update Service: Listens to payment events from Kafka and updates the order status accordingly.
+
+Steps:
+version: '3.8'
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - kafka-network
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    depends_on:
+      - zookeeper
+    networks:
+      - kafka-network
+
+networks:
+  kafka-network:
+
+Kafka Client:
+docker run -it --network container:kafka wurstmeister/kafka /bin/bash
+
+root@80ee5f5e7083:/opt/kafka/bin# kafka-console-consumer.sh  --bootstrap-server kafka:9092 --topic orders --from-beginning
+
+application.properties
+kafka.bootstrap.servers=localhost:9092
+
+mp.messaging.incoming.words-in.topic=words
+mp.messaging.outgoing.words-out.topic=words
+mp.messaging.incoming.words-in.auto.offset.reset=earliest
+
+# Kafka Configuration
+
+mp.messaging.incoming.orders-in.connector=smallrye-kafka
+mp.messaging.incoming.orders-in.topic=orders
+#mp.messaging.incoming.orders-in.value.deserializer=io.quarkus.kafka.client.serialization.ObjectMapperDeserializer
+mp.messaging.incoming.orders-in.value.deserializer=com.ibm.saga.OrderDeserializer
+
+mp.messaging.outgoing.orders-out.connector=smallrye-kafka
+mp.messaging.outgoing.orders-out.topic=orders
+#mp.messaging.outgoing.orders-out.value.serializer=io.quarkus.kafka.client.serialization.ObjectMapperSerializer mp.messaging.outgoing.orders-out.value.serializer
+mp.messaging.outgoing.orders-out.value.serializer=com.ibm.saga.OrderSerializer
+
+mp.messaging.outgoing.payments-out.connector=smallrye-kafka
+mp.messaging.outgoing.payments-out.topic=payments
+mp.messaging.outgoing.payments-out.value.serializer=com.ibm.saga.OrderSerializer
+
+
+OrderService:
+package com.ibm.saga;
+
+
+import jakarta.inject.Inject;
+import jakarta.ws.rs.POST;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.core.Response;
+import org.eclipse.microprofile.reactive.messaging.Channel;
+import org.eclipse.microprofile.reactive.messaging.Emitter;
+
+
+
+@Path("/orders")
+public class OrderResource {
+
+    @Inject
+    @Channel("orders-out")
+    Emitter<Order> orderEmitter;
+
+    @Inject
+    PaymentService paymentService;
+
+    @POST
+    public Response placeOrder(Order order) {
+        order.setStatus("PENDING");
+        // Process the payment and update the order status
+        Order updatedOrder = paymentService.processPayment(order);
+        // Publish the updated order status to the "orders" topic
+        orderEmitter.send(updatedOrder);
+        return Response.ok(updatedOrder).build();
+    }
+}
+
+Order:
+package com.ibm.saga;
+public class Order {
+    private String orderId;
+    private String productId;
+    private int quantity;
+    private String status;
+
+    // Getters and setters
+
+    public String getOrderId() {
+        return orderId;
+    }
+
+    public void setOrderId(String orderId) {
+        this.orderId = orderId;
+    }
+
+    public String getProductId() {
+        return productId;
+    }
+
+    public void setProductId(String productId) {
+        this.productId = productId;
+    }
+
+    public int getQuantity() {
+        return quantity;
+    }
+
+    public void setQuantity(int quantity) {
+        this.quantity = quantity;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+}
+
+package com.ibm.saga;
+
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.kafka.common.serialization.Serializer;
+
+import java.util.Map;
+
+public class OrderSerializer implements Serializer<Order> {
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Override
+    public void configure(Map<String, ?> configs, boolean isKey) {
+    }
+
+    @Override
+    public byte[] serialize(String topic, Order data) {
+        try {
+            return objectMapper.writeValueAsBytes(data);
+        } catch (Exception e) {
+            throw new RuntimeException("Error serializing order", e);
+        }
+    }
+
+    @Override
+    public void close() {
+    }
+}
+
+package com.ibm.saga;
+
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.kafka.common.serialization.Deserializer;
+
+import java.util.Map;
+
+public class OrderDeserializer implements Deserializer<Order> {
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Override
+    public void configure(Map<String, ?> configs, boolean isKey) {
+    }
+
+    @Override
+    public Order deserialize(String topic, byte[] data) {
+        try {
+            return objectMapper.readValue(data, Order.class);
+        } catch (Exception e) {
+            throw new RuntimeException("Error deserializing order", e);
+        }
+    }
+
+    @Override
+    public void close() {
+    }
+}
+
+package com.ibm.saga;
+
+
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import org.eclipse.microprofile.reactive.messaging.Channel;
+import org.eclipse.microprofile.reactive.messaging.Emitter;
+import org.eclipse.microprofile.reactive.messaging.Incoming;
+
+
+@ApplicationScoped
+public class PaymentService {
+
+    @Inject
+    @Channel("payments-out")
+    Emitter<Order> paymentEmitter;
+
+    public Order processPayment(Order order) {
+        try {
+            // Simulate payment processing
+            if (order.getQuantity() > 10) {
+                throw new RuntimeException("Insufficient stock");
+            }
+            order.setStatus("COMPLETED");
+            System.out.println("Payment processed successfully for order: " + order.getOrderId());
+        } catch (Exception e) {
+            order.setStatus("FAILED");
+            System.out.println("Payment failed for order: " + order.getOrderId());
+        }
+        return order;
+    }
+
+}
+
+package com.ibm.saga;
+
+
+import jakarta.enterprise.context.ApplicationScoped;
+import org.eclipse.microprofile.reactive.messaging.Incoming;
+
+
+@ApplicationScoped
+public class OrderUpdateService {
+
+    @Incoming("payments-in")
+    public void updateOrderStatus(Order order) {
+        if ("COMPLETED".equals(order.getStatus())) {
+            // Update order status to COMPLETED in the database (omitted for simplicity)
+            System.out.println("Order status updated to COMPLETED for order: " + order.getOrderId());
+        } else if ("FAILED".equals(order.getStatus())) {
+            // Handle compensation if needed (omitted for simplicity)
+            System.out.println("Order status updated to FAILED for order: " + order.getOrderId());
+        }
+    }
+}
+...................................
+
+Database Integration:
+.....................
+
+
+
+docker-compose.yml
+version: '3.8'
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - kafka-network
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    depends_on:
+      - zookeeper
+    networks:
+      - kafka-network
+
+  postgres:
+    image: postgres:latest
+    container_name: postgres_server
+    environment:
+      POSTGRES_USER: your_username
+      POSTGRES_PASSWORD: your_password
+      POSTGRES_DB: your_database
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin_client
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin_password
+    ports:
+      - "8081:80"
+
+volumes:
+  postgres_data:
+
+networks:
+  kafka-network:
+
+
+kafka.bootstrap.servers=localhost:9092
+
+mp.messaging.incoming.words-in.topic=words
+mp.messaging.outgoing.words-out.topic=words
+mp.messaging.incoming.words-in.auto.offset.reset=earliest
+
+# Kafka Configuration
+
+mp.messaging.incoming.orders-in.connector=smallrye-kafka
+mp.messaging.incoming.orders-in.topic=orders
+#mp.messaging.incoming.orders-in.value.deserializer=io.quarkus.kafka.client.serialization.ObjectMapperDeserializer
+mp.messaging.incoming.orders-in.value.deserializer=com.ibm.saga.OrderDeserializer
+
+mp.messaging.outgoing.orders-out.connector=smallrye-kafka
+mp.messaging.outgoing.orders-out.topic=orders
+#mp.messaging.outgoing.orders-out.value.serializer=io.quarkus.kafka.client.serialization.ObjectMapperSerializer mp.messaging.outgoing.orders-out.value.serializer
+mp.messaging.outgoing.orders-out.value.serializer=com.ibm.saga.OrderSerializer
+
+mp.messaging.outgoing.payments-out.connector=smallrye-kafka
+mp.messaging.outgoing.payments-out.topic=payments
+mp.messaging.outgoing.payments-out.value.serializer=com.ibm.saga.OrderSerializer
+
+## PostgreSQL Configuration
+quarkus.datasource.db-kind=postgresql
+quarkus.datasource.username=your_username
+quarkus.datasource.password= your_password
+quarkus.datasource.jdbc.url=jdbc:postgresql://localhost:5432/your_database
+#
+## Hibernate ORM Configuration
+quarkus.hibernate-orm.database.generation=drop-and-create
+quarkus.hibernate-orm.log.sql=true
+quarkus.datasource.jdbc.max-size=20
+quarkus.datasource.jdbc.min-size=5
+
+Order:
+package com.ibm.saga;
+
+import io.quarkus.hibernate.orm.panache.PanacheEntity;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Table;
+
+@Entity
+@Table(name = "orders")
+public class Order extends PanacheEntity {
+//    private String orderId;
+    public String productId;
+    public int quantity;
+    public String status;
+
+    public String getProductId() {
+        return productId;
+    }
+
+    public void setProductId(String productId) {
+        this.productId = productId;
+    }
+
+    public int getQuantity() {
+        return quantity;
+    }
+
+    public void setQuantity(int quantity) {
+        this.quantity = quantity;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+    // Getters and setters
+}
+
+OrderResource:
+package com.ibm.saga;
+
+
+import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
+import jakarta.ws.rs.POST;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.core.Response;
+import org.eclipse.microprofile.reactive.messaging.Channel;
+import org.eclipse.microprofile.reactive.messaging.Emitter;
+
+
+
+@Path("/orders")
+public class OrderResource {
+
+    @Inject
+    @Channel("orders-out")
+    Emitter<Order> orderEmitter;
+
+    @Inject
+    PaymentService paymentService;
+
+    @POST
+    @Transactional
+    public Response placeOrder(Order order) {
+        order.setStatus("PENDING");
+        // Process the payment and update the order status
+        order.persist();
+        Order updatedOrder = paymentService.processPayment(order);
+        // Publish the updated order status to the "orders" topic
+        orderEmitter.send(updatedOrder);
+        return Response.ok(updatedOrder).build();
+    }
+}
+package com.ibm.saga;
+
+
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.transaction.Transactional;
+import org.eclipse.microprofile.reactive.messaging.Incoming;
+
+
+@ApplicationScoped
+public class OrderUpdateService {
+    @Incoming("payments-in")
+    @Transactional
+    public void updateOrderStatus(Order order) {
+        Order existingOrder = Order.findById(order.id);
+        if (existingOrder != null) {
+            existingOrder.status = order.status;
+            existingOrder.persist();
+            System.out.println("Order status updated to " + order.status + " for order: " + order.id);
+        } else {
+            System.out.println("Order not found for ID: " + order.id);
+        }
+    }
+
+}
+package com.ibm.saga;
+
+
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
+import org.eclipse.microprofile.reactive.messaging.Channel;
+import org.eclipse.microprofile.reactive.messaging.Emitter;
+import org.eclipse.microprofile.reactive.messaging.Incoming;
+
+
+@ApplicationScoped
+public class PaymentService {
+
+    @Inject
+    @Channel("payments-out")
+    Emitter<Order> paymentEmitter;
+
+    public Order processPayment(Order order) {
+        try {
+            // Simulate payment processing
+            if (order.getQuantity() > 10) {
+                throw new RuntimeException("Insufficient stock");
+            }
+            order.status = "COMPLETED";
+            paymentEmitter.send(order);
+        } catch (Exception e) {
+            order.status = "FAILED";
+            paymentEmitter.send(order);
+            System.out.println("Payment failed for order: " + order.id);
+        }
+        return order;
+    }
+
+}
+

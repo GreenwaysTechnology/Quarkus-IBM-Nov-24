@@ -1,0 +1,33 @@
+An e-commerce application that uses this approach would create an order using a choreography-based saga that consists of the following steps:
+
+The Order Service receives the POST /orders request and creates an Order in a PENDING state
+It then emits an Order Created event
+The Customer Service’s event handler attempts to reserve credit
+It then emits an event indicating the outcome
+The OrderService’s event handler either approves or rejects the Order
+
+Choreography-based saga implementation using quarkus 3.17.2
+
+Dependencies:
+quarkus-hibernate-orm-panache
+quarkus-rest
+quarkus-rest-jackson
+quarkus-jdbc-postgresql
+quarkus-messaging-kafka
+
+
+Order Service:
+
+Listens for incoming POST /orders requests.
+Creates an order in the PENDING state.
+Emits an Order Created event.
+
+Customer Service:
+
+Listens for the Order Created event.
+Attempts to reserve credit for the customer.
+Emits an event (Credit Reserved or Credit Reservation Failed) indicating the outcome.
+Order Service (Continuation):
+
+Listens for the Credit Reserved or Credit Reservation Failed event.
+Updates the order status to APPROVED or REJECTED based on the event.
