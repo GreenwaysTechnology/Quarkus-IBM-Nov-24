@@ -1,0 +1,6 @@
+2024-12-06 15:34:44,421 desktop-kaufcr7 C:\Program Files\Java\jdk-17\bin\java.exe[24772] WARN  [io.qua.config] (Quarkus Main Thread) Unrecognized configuration key "quarkus.log.console.json" was provided; it will be ignored; verify that the dependency extension for this configuration is set or that you did not make a typo
+2024-12-06 15:34:44,993 desktop-kaufcr7 C:\Program Files\Java\jdk-17\bin\java.exe[24772] INFO  [io.quarkus] (Quarkus Main Thread) logging-app 1.0.0-SNAPSHOT on JVM (powered by Quarkus 3.17.3) started in 3.001s. Listening on: http://localhost:8080
+2024-12-06 15:34:44,994 desktop-kaufcr7 C:\Program Files\Java\jdk-17\bin\java.exe[24772] INFO  [io.quarkus] (Quarkus Main Thread) Profile dev activated. Live Coding activated.
+2024-12-06 15:34:44,997 desktop-kaufcr7 C:\Program Files\Java\jdk-17\bin\java.exe[24772] INFO  [io.quarkus] (Quarkus Main Thread) Installed features: [cdi, logging-gelf, rest, smallrye-context-propagation, vertx]
+2024-12-06 15:42:43,760 desktop-kaufcr7 C:\Program Files\Java\jdk-17\bin\java.exe[24772] WARNING [org.aes.rea.ter.imp.AbstractWindowsTerminal] (Shutdown thread) Failed to write out.
+2024-12-06 15:42:43,756 desktop-kaufcr7 C:\Program Files\Java\jdk-17\bin\java.exe[24772] INFO  [io.quarkus] (Shutdown thread) logging-app stopped in 0.031s
